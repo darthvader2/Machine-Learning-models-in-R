@@ -1,0 +1,185 @@
+---
+title: "Neural Network"
+author: "Varshith konda"
+date: "20/6/2020"
+output:
+  pdf_document: default
+  html_document:
+    df_print: paged
+---
+
+
+# NEURAL NETWORKS
+
+Objective of the following assignment is to  use neuralnet package from CRAN to implement neural network.
+
+Our data is 500 uniformly generated random points in the interval [0,10]
+
+
+
+```{r , echo = FALSE , warning=FALSE ,error=FALSE}
+
+library(neuralnet)
+library(ggplot2)
+
+
+set.seed(1234567890)
+Var <- runif(500, 0, 10)
+mydata <- data.frame(Var, Sin=sin(Var))
+tr <- mydata[1:25,] # Training
+te <- mydata[26:500,] # Test
+
+# Random initialization of the weights in the interval [-1, 1]
+
+winit <- c(-1,1)
+
+```
+
+
+## Training model on training data
+
+
+
+### Error,threshold and steps data of model during training
+
+```{r, echo = FALSE , warning=FALSE ,error=FALSE}
+
+
+# Training neural network with training data
+
+
+nn <- neuralnet(Sin~Var , 
+                data = tr , 
+                hidden = 5 ,
+                startweights = winit,
+                lifesign = "minimal",
+                linear.output = T,
+                rep = 10 )
+
+
+```
+
+Here sin values of the points are response variables and points are used as feature for training.
+
+After generating 500 sample points , we are using just 5 percent of the data to train the neural network and 95 percent of the data for testing the accuracy of the network.
+
+We are not using any activation function during model training as we our main motive is not classification , this is the reason "Linear.output" is  TRUE.
+
+Five hidden layers and 10 repetitions were carried out during training process , default weights of the network are  set to  NULL but we are randomly initializing weights with [-1,1].
+
+Repetition with lowest error rate and lowest number of steps is used for predicting test values.
+
+
+## Plotting true training values and predicted values from model.
+
+
+
+```{r, echo = FALSE , warning=FALSE ,error=FALSE}
+# predicting the training data with the model
+pr <- compute(nn,tr,rep = 5)
+
+# plotting the predicited values and true values
+ggplot()+
+  geom_point(aes(x=tr$Var,y=tr$Sin,color= "True-vlues"))+
+  geom_point(aes(x=tr$Var,y=pr$net.result,color= "Predicted-vlues"))
+
+```
+
+Network performed well for training data with slight margin of errors.
+
+## Predicting test data using trained  model
+
+
+
+
+
+```{r, echo = FALSE , warning=FALSE ,error=FALSE}
+
+# Predicting test data with model
+pr_test <- compute(nn,te,rep = 5)
+
+# plotting true values and predicted values
+ggplot()+
+  geom_point(aes(x=te$Var,y=te$Sin,color= "True-data"))+
+  geom_point(aes(x=te$Var,y=pr_test$net.result , color = "Predicted-values"))+
+  labs(x  = "Variable" , y = "Sin ")
+```
+
+
+
+Neural net performed moderately with minimal errors , model underperformed while predicting values from 5 to 7.5 
+
+
+## Predicting from newly generated data  
+
+
+```{r, echo = FALSE , warning=FALSE ,error=FALSE}
+set.seed(1234567890)
+
+# Generating new values from 0  - 20
+Var <- runif(500,0,20)
+
+# Appending to data frame
+twenty_500 <- data.frame(Var ,Sin =  sin(Var))
+
+# Predicting new data with model
+pred_new <- compute(nn,twenty_500,rep=5)
+
+# plotting new test values with predicted values
+ggplot()+
+  geom_point(data = twenty_500 , aes(x = Var , y = Sin,color = "True-values" ))+
+  geom_point(aes(x = twenty_500$Var , y = pred_new$net.result, color = "Predicted-values" ))+
+  labs(x  = "Variable" , y = "Sin ")
+
+
+```
+
+
+
+New data was sampled from uniformly distribution in the interval of 0 to 20.
+
+While comparing the predicted values from model with respect to true values, model accurately predicted the values until midway.
+
+
+Our sample size for  training data is very low which can cause "under fitting" , model cannot understand the coherence between features and response variable. 
+
+Due to the under fitting of the data error rate of the model can be higher.
+
+
+## Predicting variable from sin values 
+
+
+```{r, echo = FALSE , warning=FALSE ,error=FALSE}
+set.seed(12345678)
+# generating new data
+ 
+
+# appending to data frame
+new_Var <- runif(500, 0, 10)
+new_data <- data.frame(new_Var, new_Sine=sin(new_Var))
+
+new_nn <- neuralnet(new_Var~new_Sine , 
+                data = new_data , 
+                hidden = 5 ,
+                startweights = winit,
+                lifesign = "minimal",
+                rep = 10,
+                threshold = 0.03,
+                linear.output = T)
+
+# predictintg value
+new_nn_pred <- compute(new_nn , new_data,rep = 3)
+
+# plotting true vales with predicted values
+ggplot()+
+  geom_point(data = new_data ,aes(x = new_Sine , y = new_Var , color = "True-values"))+
+  geom_point(aes(x = new_data$new_Sine , y= new_nn_pred$net.result,color = "Predicted-values"))+
+  labs(x  =  "Sin " , y ="Variable")
+```
+
+
+The algorithm was not converging within the step max range, so the threshold was increased to 0.03 for converging the algorithm within the step max range.
+
+The value on y can have many possibilities from one sin function, which can lead to an improper working model.
+
+

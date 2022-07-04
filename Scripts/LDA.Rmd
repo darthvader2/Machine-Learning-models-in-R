@@ -1,0 +1,248 @@
+---
+title: "LDA"
+author: "konda varshith"
+date: "12/10/2020"
+output:
+  pdf_document: default
+  word_document: default
+  html_document:
+    df_print: paged
+---
+
+
+```{r setup, include=FALSE,echo = FALSE , message=FALSE , error=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(ggplot2)
+library(dplyr)
+library(MASS)
+```
+
+```{r,echo = FALSE , message=FALSE , error=FALSE}
+
+
+data <- iris
+```
+
+
+
+
+### Scatter plot of Sepal length vs Sepal Width
+
+```{r,echo = FALSE , message=FALSE , error=FALSE}
+ggplot(data ,aes(x=Sepal.Width,y=Sepal.Length , color  = Species))+
+  geom_point()
+```
+
+
+
+#### Mean
+
+```{r , message=FALSE , error=FALSE  ,echo=FALSE}
+setosa <- filter(data ,Species == "setosa")
+versicolor <- filter(data ,Species == "versicolor")
+virginica <- filter(data ,Species == "virginica")
+
+setosa_mean <-  c(mean(setosa$Sepal.Length) , mean(setosa$Sepal.Width))
+versicolor_mean <-  c(mean(versicolor$Sepal.Length) , mean(versicolor$Sepal.Width))
+virginica_mean <-  c(mean(virginica$Sepal.Length) , mean(virginica$Sepal.Width))
+
+```
+
+### Covariance 
+
+```{r , message=FALSE , error=FALSE,echo=FALSE}
+
+
+setosa_covariance <- cov(setosa[1:2])
+versicolor_covariance <- cov(versicolor[1:2])
+virginica_covariance <- cov(virginica[1:2])
+setosa_covariance
+virginica_covariance
+versicolor_covariance
+covariance_matrix <- c(setosa_covariance,virginica_covariance,versicolor_covariance)
+covariance_matrix <- as.matrix(covariance_matrix)
+```
+
+### Prior of classes
+
+```{r, message=FALSE , error=FALSE,echo=FALSE}
+
+setosa_prior <- nrow(setosa)/nrow(data)
+setosa_prior
+versicolor_prior <- nrow(versicolor)/nrow(data)
+versicolor_prior
+virginica_prior <- nrow(virginica)/nrow(data)
+virginica_prior
+```
+
+
+### Pooled covariance
+
+```{r , message=FALSE , error=FALSE}
+pooled_matrix <- (virginica_covariance*nrow(virginica)+(setosa_covariance*nrow(setosa))+versicolor_covariance*nrow(versicolor))/150
+pooled_matrix
+```
+
+### Underlying probabbilistic model
+
+$$x|y=C_i,\mu_i,\sum ~ N(\mu_i,\sum)$$
+$$y|\pi =  Multinomial(\pi_i.....\pi_k)$$
+
+
+### Discriminant function
+
+```{r  , message=FALSE , error=FALSE}
+
+disc_function <- function(class_data,class_mean,class_prior,class_covariance)
+{
+  (as.matrix(class_data[1:2]) %*% solve(class_covariance) %*% class_mean) -     
+  rep((0.5*(class_mean[1:2]%*%solve(class_covariance)%*%class_mean)),nrow(class_data))+rep(log(class_prior),nrow(class_data))
+  
+}
+
+setosa_disc <- disc_function(data,setosa_mean,setosa_prior,pooled_matrix)
+versicolor_disc <-  disc_function(data,versicolor_mean,versicolor_prior,pooled_matrix)
+virginica_disc <- disc_function(data,virginica_mean,virginica_prior,pooled_matrix)
+
+
+```
+
+
+### Decision boundaries 
+
+$$Log(\pi_l/\pi_k)-1/2 (\mu_k+\mu_l)^T\sum(\mu_k-\mu_l)+x^T\sum^{-1}(\mu_k-\mu_l)$$
+
+```{r,echo = FALSE , message=FALSE , error=FALSE,results='hide',warning=FALSE}
+decision_boundry <- function(pi_k,pi_l,mu_1,mu_2,x){
+  rep(log(pi_k/pi_l))-rep((0.5*t((mu_1+mu_2))%*%mu_1-mu_2)) + (as.matrix(x[1:2])%*%(mu_1-mu_2))
+}
+
+decision_boundry(setosa_prior,versicolor_prior,setosa_mean,versicolor_mean,data)
+decision_boundry(setosa_prior,virginica_prior,setosa_mean,virginica_mean,data)
+decision_boundry(versicolor_prior,virginica_prior,versicolor_mean,virginica_mean,data)
+
+```
+
+
+
+### Predicting using dicriminant function
+
+```{r echo = FALSE , message=FALSE , error=FALSE,results='hide',warning=FALSE}
+dis_val <- cbind(setosa_disc,versicolor_disc,virginica_disc)
+dis_val <- as.data.frame(dis_val)
+
+names(dis_val) <- c("Setosa" , "versicolor" , "virginica")
+
+values <- colnames(dis_val)[max.col(dis_val,ties.method = "random")]
+dis_val$values <- values
+
+
+ggplot(data,aes(x=Sepal.Length , y = Sepal.Width,color = dis_val$values))+
+  geom_point()
+
+```
+
+
+### Prediction using LDA
+
+```{r,echo = FALSE , message=FALSE , error=FALSE}
+
+
+model_lda <- lda(Species ~ Sepal.Length+Sepal.Width , data = data)
+
+lda_prediction <- predict(model_lda , data[1:2])
+
+lda_cfm <- table(lda_prediction$class,data$Species)
+
+
+ggplot(data ,aes(x=Sepal.Width,y=Sepal.Length , color  = lda_prediction$class))+
+  geom_point()
+
+
+lda_miscl_error <- 1-sum(diag(lda_cfm))/sum(lda_cfm)
+
+
+```
+
+## Confusion matrix using LDA function
+
+```{r,echo = FALSE , message=FALSE , error=FALSE}
+lda_cfm
+```
+
+## Misclassification error using LDA function
+
+```{r,echo=FALSE}
+lda_miscl_error
+```
+
+
+### Generatin new data with discriminant function
+
+
+```{r,echo = FALSE , message=FALSE , error=FALSE,results='hide',warning=FALSE}
+library(mvtnorm)
+  
+
+n_s <- rmvnorm(50, mean = setosa_mean, sigma = setosa_covariance )
+
+n_ve <- rmvnorm(50, mean = versicolor_mean, sigma = versicolor_covariance )
+
+n_vi <- rmvnorm(50, mean = virginica_mean, sigma = virginica_covariance )
+
+  n_all<-rbind(n_s,n_ve,n_vi)
+  
+  n_all<-as.data.frame(n_all)
+  
+  n_all$values <- values
+  
+  
+  sample_data <-  n_all[sample(nrow(n_all), 150), ]
+  
+  
+  names(n_all)<-c("sepal.length","sepal.width","species")
+  
+
+  ggplot(data = n_all, aes(x = sepal.length,y = sepal.width,color = values))+
+           geom_point()
+
+```
+
+### Prediction using logistic regression
+
+```{r,echo = FALSE , message=FALSE , error=FALSE,warning=FALSE}
+
+library(nnet)
+
+tr_data <- data
+tr_data$Species <- relevel(tr_data$Species, ref = 'setosa')
+
+mlm_model <- multinom(Species ~ Sepal.Length + Sepal.Width , data  = tr_data)
+
+
+pred <- predict(mlm_model , tr_data)
+
+confusion_matrix <- table(predict(mlm_model),tr_data$Species)
+
+
+
+misclassification_error <- 1-sum(diag(confusion_matrix))/sum(confusion_matrix)
+
+```
+
+#### Confusion matrix
+
+```{r echo = FALSE , message=FALSE , error=FALSE}
+confusion_matrix
+```
+
+#### Misclassification error
+
+```{r echo = FALSE , message=FALSE , error=FALSE}
+misclassification_error
+
+```
+
+
+
+

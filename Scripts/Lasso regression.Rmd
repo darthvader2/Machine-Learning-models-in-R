@@ -1,0 +1,287 @@
+---
+title: "Lasso regression"
+author: "konda varshith"
+date: "1/10/2020"
+output:
+  pdf_document: default
+  html_document:
+    df_print: paged
+---
+
+
+
+## Lasso and linear regression 
+
+
+```{r,echo=FALSE , warning=FALSE,message=FALSE}
+library(caret)
+library(glmnet)
+```
+
+
+### Splitting of data
+
+```{r , warning=FALSE ,message=FALSE,echo=FALSE}
+set.seed(12345)
+
+tecator_data <- read.csv("tecator.csv")
+tecator_data <- tecator_data[-1]
+tecator_sample <- sample.int(n = nrow(tecator_data),size = floor(0.50 * nrow(tecator_data)) , replace = F)
+tecator_train <- tecator_data[tecator_sample,]
+tecator_test <- tecator_data[-tecator_sample,]
+
+```
+
+
+## Underlying probabilistic model for linear regression
+
+$$y =  N(w_0+w_+,\sigma^2)$$
+
+
+
+```{r , warning=FALSE ,message=FALSE,echo=FALSE}
+# fitting the model
+train_model <- lm(Fat~. ,data = tecator_train[,1:101])
+
+summary_train <- summary(train_model)
+
+```
+
+#### Training and testing error for the linear model
+
+$$1/n\sum^n_{i=1}(Y_i-\hat{Y}_i)^2$$
+
+```{r ,echo=FALSE , warning=FALSE,message=FALSE}
+
+train_pred <- predict(train_model,newdata = tecator_train)
+
+train_MSE <- mean((tecator_train$Fat- train_pred)^2)
+
+test_pred <- predict(train_model,newdata = tecator_test)
+
+
+test_MSE <- mean((tecator_test$Fat- test_pred)^2)
+
+
+```
+
+**Train Error** : 0.00570911701090834
+
+**Test Error** : 722.429419336971
+
+
+
+## Underlying probabilistic model
+
+$$\hat{w}^{lasso}= argmin\{\displaystyle\sum^N_{i = 1}(y_i - w_0 - w_1x_{1j} - ...-w_px_{pj})^2 + \lambda\displaystyle\sum^p_{j=1}|w_i|\}$$
+
+## Model
+
+```{r ,echo=FALSE , warning=FALSE,message=FALSE}
+
+x_train <- as.matrix(tecator_train[,1:100] )
+y_train <- as.matrix(tecator_train$Fat)
+
+x_test <- as.matrix(tecator_test[,1:100])
+y_test <- as.matrix(tecator_test$Fat)
+
+
+lasso_model <- glmnet(x_train,y_train , family = "gaussian" , alpha = 1)
+
+
+plot(lasso_model , xvar = "lambda",label = TRUE,scale=TRUE,main = "Plot 1| log-lambda vs coefficients ")
+
+
+
+
+
+```
+
+In the plot 1.1 we can interpret that coefficients of different channels were lowered to 0 by lasso regression.
+
+Coefficient of channels 15 and  are  rapidly decreasing with increase in lambda values, where as channel 40 seems to decrease gradually.
+
+Coefficients channel 41 is converging into 0 nearly at lambda value of 2,it seems to have more slow decline than channel 40,a slight irregularities can be observed from - 2 to 0.
+
+Lambda values -3 to -1 can lead to overfitting of the data.
+
+
+# Plot to show dependence on "DEV"
+
+
+```{r, warning=FALSE ,message=FALSE,echo=FALSE,fig.align='center'}
+plot(lasso_model , xvar = "dev",label = TRUE,scale=TRUE,main = "Plot | 2")
+
+summary(lasso_model)
+```
+
+From the plot 2 we can notice that 8 channels can interpret 80 percent of the variable  and 3 features can explain 40 percent of the variable.
+
+It would be a better option to choose 8 or 5 features from the data as they can interpret sixty and eighty percentage of the variable.
+
+Features above 80 percentage  fall under over fitting region.
+
+
+#### Choosing penalty factor from model
+
+```{r, warning=FALSE ,message=FALSE,echo=FALSE}
+
+df <- lasso_model$df
+
+lambda <- lasso_model$lambda
+
+new_lambda <- lambda[which(df == 3)]
+
+print(new_lambda)
+```
+
+
+### Using VarImp function to crossvalidate the feature selection
+
+from the obtained lambda values and varImp function 
+
+As the lambda values lie between 0.7 and .85, I have chosen lambda as 0.8.
+
+```{r, warning=FALSE ,message=FALSE}
+varimp <- varImp(lasso_model,lambda= 0.8)
+
+```
+
+From the above steps we can prove that $lambda$ can be 0.8 to obtain only three features
+
+$$\lambda = 0.8$$
+
+
+```{r ,echo=FALSE , warning=FALSE,message=FALSE}
+coefs = NULL
+coefs$df <- lasso_model$df
+coefs$lambda <- lasso_model$lambda
+coefs <- as.data.frame(coefs)
+
+ggplot(coefs,aes(lasso_model$lambda, lasso_model$df))+
+  geom_point()+
+  labs(x = "Lambda" , y = "Df")+
+  geom_smooth()+
+  labs(title = "Plot 3 | Dependense of DF on Penalty parameter ")
+  
+
+
+```
+
+The degrees of freedom in gradually decreasing upto penalty factor of 1 and extended uniformly through remaining penalty factor values.
+
+High concentration of points can be observed from 0 to 0.5 values.
+
+
+```{r ,echo=FALSE , warning=FALSE,message=FALSE}
+
+lasso_model <- glmnet(x_train,y_train , family = "gaussian" , alpha = 0)
+
+plot(lasso_model , xvar = "lambda" , main = "Plot 4 | Ridge regression of the model")
+
+```
+
+Ridge regression is using  all the available features which intern makes model more complex.
+
+From plot we can observe that ridge regression has shrunk coefficients to lower values but didn't turn them into zeros, this is due to ridge regression's penalty factor which penalizes high beta values thereby shrinking beta values.
+
+Lasso has penalized the beta coefficients and enforced them to 0 , which excluded unnecessary features from model.
+
+
+
+#### Cross validation model
+
+```{r ,echo=FALSE , warning=FALSE,message=FALSE}
+
+cross_validation <- cv.glmnet(x_train,y_train ,alpha = 1,family = "gaussian")
+
+optimal_lambda <- cross_validation$lambda.min
+
+
+optimal_model <- glmnet(x_train,y_train , lambda = optimal_lambda,alpha = 1)
+
+optimal_model
+
+
+plot(cross_validation, xvar = "lambda",main = "Plot 5 | CV score on Lambda")
+
+
+```
+
+The optimal $\lambda$ is $0.05744535$ and 8 variables are chosen in this model.
+
+The  glmnet has highlighted two lambda values with one standard error apart, one closer to -3 gives minimum mean square error.
+
+For large lambda values we observe minimal changes  but as lambda decreases there's a rapid drop in mean squared error.
+
+The region between these lambdas are best observed by the model , -2 as lambda has high MSE values,due to this model become biased.
+
+Hence, choosing the  value that increase the bias of a model is not recommended.
+
+
+
+
+
+```{R ,echo=FALSE , warning=FALSE,message=FALSE}
+optimal_pred <- predict(optimal_model,s = optimal_lambda, newx= x_test )
+
+op_coef <- coef(optimal_model , s = "lambda.min")
+
+
+pre_cv <- predict(cross_validation,x_test, c = "lambda.min")
+
+ggplot()+
+  geom_point(aes(x = seq_len(108) , y = as.numeric(pre_cv),color = "Optimal-model"))+
+  geom_point(aes(x =seq_len(108) , y = y_test , color = "test"))+
+  labs(title = "Plot 6 | Scatter plot of test data and optimal lambda predictions")
+
+```
+
+The model with optimal lambda  predicted the test values with slight variations, it is not the best model but  not a bad model.
+
+
+
+
+
+```{r ,echo=FALSE , warning=FALSE,message=FALSE}
+pre_cv2 <- pre_cv - tecator_train$Fat
+
+sigma <- sd(pre_cv2)
+
+w_value <- as.matrix(coef(cross_validation, s = "lambda.min"))
+
+w_value <- w_value[-which(w_value[,1] == 0), 1]
+
+w <- names(tecator_test) %in% names(w_value)[-1]
+
+x_value <- tecator_test[, w]
+
+pre_new <- lapply(seq_len(108), function(x) 
+  rnorm(1, mean = sum(as.numeric(x_value[x, ]) * unname(w_value)[-1]) + 
+          unname(w_value)[1], sd = sigma))
+
+
+ggplot()+
+  geom_point(aes(x = seq_len(108) , y = as.numeric(y_test),color = "Test-values"))+
+  geom_point(aes(x =seq_len(108) , y = unlist(pre_new ),color = "Generated"))+
+  labs(title ="Plot 7 | Generated and test-values")
+
+
+```
+
+
+Data generated does not fit the test data, but are nearer to the true values.
+
+We can increase the quality of data generations with more tuning to the model, we should also cross check with other regression models for more insights.
+
+# References
+
+1. https://beta.vu.nl/nl/Images/werkstuk-fonti_tcm235-836234.pdf
+
+2. http://www.stat.cmu.edu/~ryantibs/statcomp-F16/lectures/train_test.html
+
+3. https://bradleyboehmke.github.io/HOML/regularized-regression.html
+
+4. https://hackernoon.com/practical-machine-learning-ridge-regression-vs-lasso-a00326371ece
+
+
